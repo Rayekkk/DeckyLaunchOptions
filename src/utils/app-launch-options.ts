@@ -1,3 +1,6 @@
+import { AppDetails } from "@decky/ui/dist/globals/steam-client/App"
+import { Profile } from "../shared"
+
 export const appLaunchOptionsUpdatedEventType = "dlo-app-launch-options-updated"
 
 export interface DloCommandInfo {
@@ -49,5 +52,45 @@ export function setAppLaunchOptions(appid: number, launchOptions: string) {
     new CustomEvent(appLaunchOptionsUpdatedEventType, {
       detail: { appid, launchOptions },
     }),
+  )
+}
+
+/**
+ * Put back an app's original launch options, but only where DLO is in charge,
+ * so apps opted out of auto-management (e.g. MoonDeck shortcuts) or never
+ * switched to the DLO command keep whatever Steam currently has.
+ */
+export function restoreAppLaunchOptions(
+  appid: number,
+  profile: Profile,
+  autoManage: { steam: boolean; nonSteam: boolean },
+  info?: DloCommandInfo,
+) {
+  const { unregister } = SteamClient.Apps.RegisterForAppDetails(
+    appid,
+    (details: AppDetails) => {
+      const appDetails = details as AppDetails & {
+        strLaunchOptions?: string
+        strShortcutExe?: unknown
+      }
+      const isNonSteamApp = typeof appDetails.strShortcutExe !== "undefined"
+      const isAutoManaged =
+        (isNonSteamApp ? autoManage.nonSteam : autoManage.steam) &&
+        profile.disableAutoManageLaunchOptions !== true
+      // Steam app details hold the live launch options. Shortcut details do
+      // not (DLO reads shortcuts.vdf for them), so for those fall back to the
+      // auto-manage settings, under which DLO re-applies its command anyway.
+      const isManagedByDlo =
+        !isNonSteamApp && info
+          ? appLaunchOptionsIncludesSupportedDloCommand(
+              appDetails.strLaunchOptions ?? "",
+              info,
+            )
+          : isAutoManaged
+      if (isManagedByDlo) {
+        setAppLaunchOptions(appid, profile.originalLaunchOptions)
+      }
+      unregister()
+    },
   )
 }

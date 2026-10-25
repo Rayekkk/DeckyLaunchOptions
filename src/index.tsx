@@ -11,11 +11,16 @@ import { AppLaunchOptionsPage } from "./teams/launch-options/views/[_appid]"
 import { EnvVariableMergesPage } from "./teams/env-variable-merges/views"
 import { QueryClientProvider } from "@tanstack/react-query"
 import contextMenuPatch, { LibraryContextMenu } from "./patches/context-menu"
-import { getSettingsQueryOptions, queryClient } from "./query"
+import {
+  getInfoQueryOptions,
+  getSettingsQueryOptions,
+  queryClient,
+} from "./query"
 import { libraryAppPatch } from "./patches/library-app"
 import { Content } from "./components/content"
 import { batchCreateLaunchOptions } from "./components/batch-add-launch-options"
-import { setAppLaunchOptions } from "./utils"
+import { restoreAppLaunchOptions } from "./utils"
+import { settingsStore } from "./stores"
 
 export default definePlugin(() => {
   routerHook.addRoute(routes.appLaunchOptions(), () => {
@@ -43,6 +48,7 @@ export default definePlugin(() => {
   const menuPatches = contextMenuPatch(LibraryContextMenu)
   const libraryAppPatchResult = libraryAppPatch()
   void queryClient.prefetchQuery(getSettingsQueryOptions)
+  void queryClient.prefetchQuery(getInfoQueryOptions)
 
   function onBatchCreateLaunchOptions(
     event: CustomEvent<Partial<LaunchOption>[]>,
@@ -73,9 +79,14 @@ export default definePlugin(() => {
       const settings = queryClient.getQueryData(
         getSettingsQueryOptions.queryKey,
       )
+      const info = queryClient.getQueryData(getInfoQueryOptions.queryKey)
+      const autoManage = {
+        steam: settingsStore.state.autoManageLaunchOptions,
+        nonSteam: settingsStore.state.autoManageNonSteamLaunchOptions,
+      }
       if (settings) {
         Object.entries(settings.profiles).forEach(([appid, profile]) => {
-          setAppLaunchOptions(Number(appid), profile.originalLaunchOptions)
+          restoreAppLaunchOptions(Number(appid), profile, autoManage, info)
         })
       }
       window.removeEventListener(

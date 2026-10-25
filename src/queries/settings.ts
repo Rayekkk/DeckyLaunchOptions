@@ -26,13 +26,17 @@ export const keys = {
   ],
 }
 
-export const useGetInfoQuery = () =>
-  useQuery({
-    queryKey: keys.info(),
-    queryFn() {
-      return get_info()
-    },
-  })
+export const getInfoQueryOptions = queryOptions({
+  queryKey: keys.info(),
+  queryFn() {
+    return get_info()
+  },
+  // Static paths; keep them cached so onDismount can still read them.
+  staleTime: Infinity,
+  gcTime: Infinity,
+})
+
+export const useGetInfoQuery = () => useQuery(getInfoQueryOptions)
 
 export const getSettingsQueryOptions = queryOptions({
   queryKey: keys.settings(),
