@@ -858,6 +858,20 @@ if __name__ == "__main__":
             os.path.expanduser("~/lsfg"), "PROGRA~1", "/path/to/game"
         ]
 
+    # Test K: Missing wrappers are skipped but reported
+    with patch(
+        "run.shutil.which",
+        side_effect=lambda cmd: None if cmd == "missing-wrapper" else "/usr/bin/fake",
+    ):
+        skipped_k = []
+        settings_k = make_settings([
+            make_opt("missing", "missing-wrapper --flag %command%", priority=10),
+            make_opt("present", "mangohud %command%"),
+        ])
+        final_args_k, _ = get_final_args_details(settings_k, "123", skipped_k)
+        assert final_args_k == ["mangohud", "/path/to/game"]
+        assert skipped_k == [["missing-wrapper", "--flag"]]
+
     # Restore sys.argv
     sys.argv = original_argv
 

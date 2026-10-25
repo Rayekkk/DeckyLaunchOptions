@@ -320,7 +320,7 @@ def get_shell_command_log_details(executable_args):
     }
 
 
-def get_final_args_details(settings, appid):
+def get_final_args_details(settings, appid, skipped_prefixes=None):
     base_args = sys.argv[1:]
 
     # Safely access settings structure
@@ -448,7 +448,9 @@ def get_final_args_details(settings, appid):
             # Check if it's an executable in PATH or an existing file
             if shutil.which(first_part) or os.path.isfile(first_part):
                 final_args.extend(expanded_prefix)
-        # else: skip this prefix silently if command doesn't exist
+            # Skip a missing wrapper so the game still starts, but report it
+            elif skipped_prefixes is not None:
+                skipped_prefixes.append(expanded_prefix)
         else:
             final_args.extend(expanded_prefix)
 
@@ -480,13 +482,17 @@ if __name__ == "__main__":
 
         executable_args = args
         applied_env_vars = {}
+        skipped_prefixes = []
         if settings:
             try:
-                executable_args, applied_env_vars = get_final_args_details(settings, appid)
+                executable_args, applied_env_vars = get_final_args_details(
+                    settings, appid, skipped_prefixes
+                )
             except Exception:
                 # Failed to apply launch options, fall back to original command
                 executable_args = args
                 applied_env_vars = {}
+                skipped_prefixes = []
 
         # Try to write logs, but don't let it block execution
         try:
@@ -525,6 +531,12 @@ if __name__ == "__main__":
                     for i, arg in enumerate(executable_args):
                         f.write(f"{i:02d}: {arg}\n")
                     f.write("\n")
+
+                    if skipped_prefixes:
+                        f.write("[Skipped Wrappers (command not found)]\n")
+                        for i, prefix in enumerate(skipped_prefixes):
+                            f.write(f"{i:02d}: {' '.join(prefix)}\n")
+                        f.write("\n")
 
                     f.write("[Applied Environment Variables]\n")
                     if applied_env_vars:
