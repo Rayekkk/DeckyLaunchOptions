@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from datetime import datetime
 import json
 import os
@@ -6,6 +7,7 @@ import shutil
 import stat
 import struct
 import sys
+import tempfile
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent
@@ -249,11 +251,29 @@ class Plugin:
 
     def _write_json(self, file_path, data):
         try:
-            path = Path(file_path)
+            # Resolve so os.replace swaps a symlink's target, not the link.
+            path = Path(file_path).resolve()
             path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
+            # Write a temp file and swap it in, so a crash or power loss
+            # mid-write never leaves a truncated settings file behind.
+            fd, tmp_path = tempfile.mkstemp(
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4)
+                    f.flush()
+                    os.fsync(f.fileno())
+                # mkstemp creates 0600; keep the mode open() used to give.
+                os.chmod(tmp_path, 0o644)
+                os.replace(tmp_path, path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_path)
+                raise
         except (OSError, IOError, TypeError) as e:
             log(f"Failed to write JSON to {file_path}: {e}")
             raise
@@ -266,7 +286,18 @@ class Plugin:
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
+        except FileNotFoundError:
+            return None
+        except ValueError as e:
+            # The UI treats missing settings as empty and saves over them, so
+            # move the unreadable file aside instead of losing it.
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            corrupt_path = path.with_name(f"{path.name}.corrupt-{timestamp}")
+            try:
+                path.replace(corrupt_path)
+                log(f"Unreadable {file_path} moved to {corrupt_path}: {e}")
+            except OSError as move_error:
+                log(f"Unreadable {file_path} could not be moved: {move_error}")
             return None
 
     async def has_shell_script(self):

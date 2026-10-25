@@ -125,5 +125,57 @@ class SettingsFolderBackupTests(unittest.TestCase):
             )
 
 
+class SettingsFileTests(unittest.TestCase):
+    def test_write_json_replaces_file_without_leaving_temp_files(self):
+        with TemporaryDirectory() as temporary_directory:
+            settings_path = Path(temporary_directory) / "settings.json"
+            settings_path.write_text('{"old": true}', encoding="utf-8")
+
+            main.Plugin()._write_json(settings_path, {"profiles": {}})
+
+            self.assertEqual(
+                main.Plugin()._read_json(settings_path),
+                {"profiles": {}},
+            )
+            self.assertEqual(
+                [path.name for path in Path(temporary_directory).iterdir()],
+                ["settings.json"],
+            )
+
+    def test_write_json_keeps_previous_file_when_serialization_fails(self):
+        with TemporaryDirectory() as temporary_directory:
+            settings_path = Path(temporary_directory) / "settings.json"
+            settings_path.write_text('{"old": true}', encoding="utf-8")
+
+            with self.assertRaises(TypeError):
+                main.Plugin()._write_json(settings_path, {"bad": object()})
+
+            self.assertEqual(
+                settings_path.read_text(encoding="utf-8"),
+                '{"old": true}',
+            )
+            self.assertEqual(
+                [path.name for path in Path(temporary_directory).iterdir()],
+                ["settings.json"],
+            )
+
+    def test_read_json_moves_unreadable_file_aside(self):
+        with TemporaryDirectory() as temporary_directory:
+            settings_path = Path(temporary_directory) / "settings.json"
+            settings_path.write_text('{"profiles": {', encoding="utf-8")
+
+            self.assertIsNone(main.Plugin()._read_json(settings_path))
+
+            self.assertFalse(settings_path.exists())
+            corrupt_paths = list(
+                Path(temporary_directory).glob("settings.json.corrupt-*")
+            )
+            self.assertEqual(len(corrupt_paths), 1)
+            self.assertEqual(
+                corrupt_paths[0].read_text(encoding="utf-8"),
+                '{"profiles": {',
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
