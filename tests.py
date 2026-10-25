@@ -848,6 +848,16 @@ if __name__ == "__main__":
         print(f"Expected: {expected_i}")
         print(f"\n{'PASS' if match_i else 'FAIL'}")
 
+    # Test J: ~ only expands at the start of a wrapper token
+    with patch("run.shutil.which", return_value="/usr/bin/fake"):
+        settings_j = make_settings([
+            make_opt("tilde", "~/lsfg PROGRA~1 %command%"),
+        ])
+        final_args_j, _ = get_final_args_details(settings_j, "123")
+        assert final_args_j == [
+            os.path.expanduser("~/lsfg"), "PROGRA~1", "/path/to/game"
+        ]
+
     # Restore sys.argv
     sys.argv = original_argv
 

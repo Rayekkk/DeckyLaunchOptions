@@ -439,8 +439,8 @@ def get_final_args_details(settings, appid):
 
     # Add all prefixes
     for prefix in all_prefixes:
-        # Expand ~ in paths
-        expanded_prefix = [part.replace("~", os.path.expanduser("~")) for part in prefix]
+        # Expand a leading ~ like the shell does, leaving e.g. PROGRA~1 alone
+        expanded_prefix = [os.path.expanduser(part) for part in prefix]
 
         # Check if the command/executable exists
         if expanded_prefix:
